@@ -1,8 +1,4 @@
-"""
-DMND Meta Ads → Google Sheets.
-Тягне insights (з дати старту по сьогодні), класифікує JOB/TG,
-пише raw_meta + топ-креативи + зведення.
-"""
+"""DMND Meta Ads → Google Sheets. Денна/місячна розбивка JOB і TG + креативи-картинки."""
 import datetime
 import logging
 import config as C
@@ -18,28 +14,34 @@ def main():
     until = datetime.date.today().isoformat()
     log.info("Період: %s → %s", C.SYNC_SINCE, until)
 
-    log.info("Тягну insights з Meta...")
     insights = meta.fetch_insights(C.SYNC_SINCE, until)
-    log.info("  отримано рядків: %d", len(insights))
+    log.info("Денних рядків з Meta: %d", len(insights))
+    norm = T.normalize(insights)
 
-    ad_ids = [r.get("ad_id") for r in insights if r.get("ad_id")]
-    log.info("Тягну прев'ю креативів (%d)...", len(ad_ids))
-    thumbs = meta.fetch_thumbnails(ad_ids)
-    log.info("  прев'ю: %d", len(thumbs))
+    ad_ids = list({it["ad_id"] for it in norm if it["ad_id"]})
+    images = meta.fetch_images(ad_ids)
+    log.info("Зображень креативів: %d", len(images))
 
-    rows = T.build_rows(insights, thumbs)
-
-    log.info("Пишу в Google Sheets...")
     sh = sheets.open_sheet()
-    sheets.write_raw(sh, rows)
-    sheets.write_vertical_tab(sh, "JOB",
-                              T.campaigns_breakdown(rows, "JOB"),
-                              T.top_creatives(rows, "JOB", C.TOP_CREATIVES))
-    sheets.write_vertical_tab(sh, "TG",
-                              T.campaigns_breakdown(rows, "TG"),
-                              T.top_creatives(rows, "TG", C.TOP_CREATIVES))
-    sheets.write_all_creatives(sh, T.all_creatives(rows))
-    sheets.write_timestamp(sh)
+    log.info("Пишу raw_meta...")
+    sheets.write_raw(sh, T.raw_rows(norm, images))
+
+    log.info("Пишу Огляд...")
+    sheets.write_overview(sh, T.vertical_totals(norm, "JOB"), T.vertical_totals(norm, "TG"))
+
+    for vert, tab, day_tab, mon_tab in [
+        ("JOB", "JOB", "JOB_дні", "JOB_місяці"),
+        ("TG", "TG", "TG_дні", "TG_місяці"),
+    ]:
+        log.info("Пишу %s...", vert)
+        sheets.write_campaign_tab(sh, tab,
+                                  T.campaigns_breakdown(norm, vert),
+                                  T.top_creatives(norm, images, vert, C.TOP_CREATIVES))
+        sheets.write_table(sh, day_tab, T.by_period(norm, vert, "day"))
+        sheets.write_table(sh, mon_tab, T.by_period(norm, vert, "month"))
+
+    log.info("Пишу Креативи...")
+    sheets.write_all_creatives(sh, T.all_creatives(norm, images))
     log.info("Готово ✅")
 
 
