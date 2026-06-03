@@ -1,4 +1,4 @@
-"""DMND Meta Ads → Google Sheets. Денна/місячна розбивка JOB і TG + креативи-картинки."""
+"""DMND Meta Ads → Google Sheets. JOB/TG: кампанії, дні, місяці, креативи по сегментах."""
 import datetime
 import logging
 import config as C
@@ -23,10 +23,7 @@ def main():
     log.info("Зображень креативів: %d", len(images))
 
     sh = sheets.open_sheet()
-    log.info("Пишу raw_meta...")
     sheets.write_raw(sh, T.raw_rows(norm, images))
-
-    log.info("Пишу Огляд...")
     sheets.write_overview(sh, T.vertical_totals(norm, "JOB"), T.vertical_totals(norm, "TG"))
 
     for vert, tab, day_tab, mon_tab in [
@@ -36,11 +33,11 @@ def main():
         log.info("Пишу %s...", vert)
         sheets.write_campaign_tab(sh, tab,
                                   T.campaigns_breakdown(norm, vert),
-                                  T.top_creatives(norm, images, vert, C.TOP_CREATIVES))
+                                  T.creatives_by_segment(norm, images, vert),
+                                  vert)
         sheets.write_table(sh, day_tab, T.by_period(norm, vert, "day"))
         sheets.write_table(sh, mon_tab, T.by_period(norm, vert, "month"))
 
-    log.info("Пишу Креативи...")
     sheets.write_all_creatives(sh, T.all_creatives(norm, images))
     log.info("Готово ✅")
 
