@@ -8,7 +8,10 @@ import config as C
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets",
           "https://www.googleapis.com/auth/drive"]
 
-IMG_H = 80  # висота рядка з картинкою, px
+IMG_H = 80
+NAVY = {"red": 0.043, "green": 0.121, "blue": 0.227}
+LBLUE = {"red": 0.839, "green": 0.894, "blue": 0.941}
+WHITE = {"red": 1, "green": 1, "blue": 1}
 
 
 def open_sheet():
@@ -18,18 +21,33 @@ def open_sheet():
 
 
 def _img(url):
-    """Формула-картинка в клітинці (підлаштовується під розмір клітинки)."""
     return f'=IMAGE("{url}";4;{IMG_H};{IMG_H})' if url else ""
 
 
-def _set_row_heights(sh, ws, start, count, px=IMG_H):
-    if count <= 0:
-        return
-    sh.batch_update({"requests": [{
-        "updateDimensionProperties": {
-            "range": {"sheetId": ws.id, "dimension": "ROWS",
-                      "startIndex": start - 1, "endIndex": start - 1 + count},
-            "properties": {"pixelSize": px}, "fields": "pixelSize"}}]})
+def _fmt_req(ws, r0, r1, c0, c1, bg=None, bold=False, color=None):
+    """repeatCell-запит форматування (0-based, напіввідкритий інтервал рядків/колонок)."""
+    cell = {}
+    if bg:
+        cell["backgroundColor"] = bg
+    tf = {}
+    if bold:
+        tf["bold"] = True
+    if color:
+        tf["foregroundColor"] = color
+    if tf:
+        cell["textFormat"] = tf
+    return {"repeatCell": {
+        "range": {"sheetId": ws.id, "startRowIndex": r0, "endRowIndex": r1,
+                  "startColumnIndex": c0, "endColumnIndex": c1},
+        "cell": {"userEnteredFormat": cell},
+        "fields": "userEnteredFormat(backgroundColor,textFormat)"}}
+
+
+def _height_req(ws, row, count, px=IMG_H):
+    return {"updateDimensionProperties": {
+        "range": {"sheetId": ws.id, "dimension": "ROWS",
+                  "startIndex": row - 1, "endIndex": row - 1 + count},
+        "properties": {"pixelSize": px}, "fields": "pixelSize"}}
 
 
 def write_raw(sh, rows):
@@ -48,42 +66,58 @@ def write_overview(sh, job, tg):
 
 
 def write_table(sh, tab, rows, total=True):
-    """Універсальний запис таблиці (кампанії / дні / місяці) зі значеннями + рядок ВСЬОГО."""
     ws = sh.worksheet(tab)
     ws.batch_clear([f"A4:H{4 + 20000}"])
     block = [list(r) for r in rows]
     if total and rows:
         s = sum(r[1] for r in rows); im = sum(r[2] for r in rows)
         cl = sum(r[3] for r in rows); re = sum(r[4] for r in rows)
-        cpr = round(s / re, 2) if re else 0.0
-        ctr = round(cl / im, 4) if im else 0.0
-        cpc = round(s / cl, 2) if cl else 0.0
-        block.append(["ВСЬОГО", round(s, 2), int(im), int(cl), int(re), cpr, ctr, cpc])
+        block.append(["ВСЬОГО", round(s, 2), int(im), int(cl), int(re),
+                      round(s / re, 2) if re else 0.0,
+                      round(cl / im, 4) if im else 0.0,
+                      round(s / cl, 2) if cl else 0.0])
     if block:
         ws.update(f"A4:H{3 + len(block)}", block, value_input_option="USER_ENTERED")
 
 
-def write_campaign_tab(sh, tab, campaigns, creatives):
-    """Вкладка JOB/TG: кампанії + ВСЬОГО, нижче секція ТОП КРЕАТИВИ з картинками."""
+def write_campaign_tab(sh, tab, campaigns, seg_groups, vertical):
+    """JOB/TG: таблиця кампаній + ВСЬОГО, нижче КРЕАТИВИ ПО СЕГМЕНТАХ (всі крео, з картинками)."""
     write_table(sh, tab, campaigns, total=True)
     ws = sh.worksheet(tab)
+
     base = 4 + len(campaigns) + (1 if campaigns else 0)
-    cs = base + 2
-    ws.update(f"A{cs}:F{cs}", [["ТОП КРЕАТИВИ", "", "", "", "", ""]], value_input_option="USER_ENTERED")
-    ws.update(f"A{cs + 1}:F{cs + 1}",
-              [["Оголошення", "Витрати, $", "Кліки", "Результати", "Ціна за рез., $", "Креатив"]],
-              value_input_option="USER_ENTERED")
-    if creatives:
-        body = [[c[0], c[1], c[2], c[3], c[4], _img(c[5])] for c in creatives]
-        first = cs + 2
-        ws.update(f"A{first}:F{first + len(body) - 1}", body, value_input_option="USER_ENTERED")
-        _set_row_heights(sh, ws, first, len(body))
+    cs = base + 2  # рядок заголовка секції
+    ws.batch_clear([f"A{cs}:F{cs + 20000}"])
+
+    block = [["КРЕАТИВИ ПО СЕГМЕНТАХ", "", "", "", "", ""],
+             ["Оголошення", "Витрати, $", "Кліки", "Результати", "Ціна за рез., $", "Креатив"]]
+    divider_rows, image_rows = [], []
+    for seg, rows in seg_groups:
+        label = f"ГЕО: {seg}" if vertical == "TG" else f"Сегмент: {seg}"
+        divider_rows.append(cs + len(block))
+        block.append([label, "", "", "", "", ""])
+        for r in rows:
+            image_rows.append(cs + len(block))
+            block.append([r[0], r[1], r[2], r[3], r[4], _img(r[5])])
+
+    ws.update(f"A{cs}:F{cs + len(block) - 1}", block, value_input_option="USER_ENTERED")
+
+    reqs = [
+        _fmt_req(ws, cs - 1, cs, 0, 6, bold=True, color=NAVY),                 # title
+        _fmt_req(ws, cs, cs + 1, 0, 6, bg=NAVY, bold=True, color=WHITE),       # header
+    ]
+    for dr in divider_rows:
+        reqs.append(_fmt_req(ws, dr - 1, dr, 0, 6, bg=LBLUE, bold=True))
+    for ir in image_rows:
+        reqs.append(_height_req(ws, ir, 1))
+    if reqs:
+        sh.batch_update({"requests": reqs})
 
 
 def write_all_creatives(sh, creatives):
     ws = sh.worksheet("Креативи")
-    ws.batch_clear(["A4:H100000"])
+    ws.batch_clear(["A4:I100000"])
     if creatives:
-        body = [[c[0], c[1], c[2], c[3], c[4], c[5], c[6], _img(c[7])] for c in creatives]
-        ws.update(f"A4:H{3 + len(body)}", body, value_input_option="USER_ENTERED")
-        _set_row_heights(sh, ws, 4, len(body))
+        body = [[c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], _img(c[8])] for c in creatives]
+        ws.update(f"A4:I{3 + len(body)}", body, value_input_option="USER_ENTERED")
+        sh.batch_update({"requests": [_height_req(ws, 4, len(body))]})
