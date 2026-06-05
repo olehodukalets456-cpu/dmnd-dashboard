@@ -22,9 +22,6 @@ def main():
     images = meta.fetch_images(ad_ids)
     log.info("Зображень креативів: %d", len(images))
 
-    geo_rows = meta.fetch_insights_geo(C.SYNC_SINCE, until)
-    log.info("Гео-рядків: %d", len(geo_rows))
-
     sh = sheets.open_sheet()
     sheets.write_raw(sh, T.raw_rows(norm, images))
     sheets.write_overview(sh, T.vertical_totals(norm, "JOB"), T.vertical_totals(norm, "TG"))
@@ -41,7 +38,6 @@ def main():
         sheets.write_table(sh, day_tab, T.by_period(norm, vert, "day"))
         sheets.write_table(sh, mon_tab, T.by_period(norm, vert, "month"))
 
-    sheets.write_table(sh, "JOB_ГЕО", T.geo_breakdown(geo_rows, "JOB"))
     sheets.write_all_creatives(sh, T.all_creatives(norm, images))
     log.info("Готово ✅")
 
