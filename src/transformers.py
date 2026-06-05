@@ -42,13 +42,11 @@ def segment(campaign, vertical):
         return "—"
     if vertical == "JOB":
         low = name.lower()
-        if "facebook" in low:
+        if "facebook" in low or "fb байєр" in low or "fb buyer" in low:
             return "FB байєр"
         if "google" in low:
             return "Google байєр"
-        toks = [t.strip() for t in name.replace("-", "|").split("|") if t.strip()]
-        rest = [t for t in toks if t.upper() not in _DROP]
-        return rest[0] if rest else "інше"
+        return "Інше"
     return "інше"
 
 
@@ -121,16 +119,27 @@ def by_period(norm, vertical, period):
 
 
 def creatives_by_segment(norm, images, vertical):
-    """{сегмент: [рядки крео]} — ВСІ креативи, згруповані за сегментом, відсортовані за результатами."""
+    """{сегмент: [рядки крео]} — креативи групуються по (сегмент + назва оголошення):
+    однакові назви в одному сегменті схлопуються в один рядок із сумарною статою."""
     items = [it for it in norm if it["vertical"] == vertical]
+    # групуємо по (сегмент, назва) — однакові назви плюсуються
+    by_name = {}
+    img_pick = {}  # (сегмент,назва) -> (витрати оголошення, url) щоб взяти картинку найбільшого
     by_ad = _agg(items, lambda it: it["ad_id"])
-    seg = {}
     for ad_id, d in by_ad.items():
         ref = d["ref"]
-        spend, impr, clicks, res, cpr, *_ = _metrics(d["spend"], d["impr"], d["clicks"], d["results"])
-        seg.setdefault(ref["segment"], []).append(
-            [ref["ad_name"], spend, clicks, res, cpr, images.get(ad_id, "")])
-    # сортуємо крео всередині сегмента за результатами, сегменти — за сумарними витратами
+        key = (ref["segment"], ref["ad_name"])
+        g = by_name.setdefault(key, {"spend": 0.0, "impr": 0.0, "clicks": 0.0, "results": 0.0})
+        g["spend"] += d["spend"]; g["impr"] += d["impr"]
+        g["clicks"] += d["clicks"]; g["results"] += d["results"]
+        url = images.get(ad_id, "")
+        if url and d["spend"] >= img_pick.get(key, (-1, ""))[0]:
+            img_pick[key] = (d["spend"], url)
+    # збираємо по сегментах
+    seg = {}
+    for (s, name), g in by_name.items():
+        spend, impr, clicks, res, cpr, *_ = _metrics(g["spend"], g["impr"], g["clicks"], g["results"])
+        seg.setdefault(s, []).append([name, spend, clicks, res, cpr, img_pick.get((s, name), (0, ""))[1]])
     groups = []
     for s, rows in seg.items():
         rows.sort(key=lambda r: (r[3], r[1]), reverse=True)
