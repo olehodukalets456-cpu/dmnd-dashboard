@@ -40,6 +40,29 @@ def fetch_insights(since, until):
     return rows
 
 
+
+def fetch_insights_geo(since, until):
+    """Insights з розбивкою по країні юзера (breakdowns=country), агреговано за період."""
+    url = f"{BASE}/act_{C.META_AD_ACCOUNT_ID}/insights"
+    params = {
+        "access_token": C.META_ACCESS_TOKEN,
+        "level": "ad",
+        "time_range": f'{{"since":"{since}","until":"{until}"}}',
+        "breakdowns": "country",
+        "fields": ",".join([
+            "campaign_name", "ad_id",
+            "spend", "impressions", "clicks", "inline_link_clicks", "actions",
+        ]),
+        "limit": 500,
+    }
+    rows, page = [], _get(url, params)
+    rows.extend(page.get("data", []))
+    while page.get("paging", {}).get("next"):
+        page = _get(page["paging"]["next"], {})
+        rows.extend(page.get("data", []))
+    return rows
+
+
 def fetch_images(ad_ids):
     """{ad_id: url} — повне зображення креатива (image_url), fallback на thumbnail_url."""
     out = {}
