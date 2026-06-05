@@ -150,3 +150,20 @@ def all_creatives(norm, images):
                     spend, clicks, res, cpr, images.get(ad_id, "")])
     out.sort(key=lambda r: r[4], reverse=True)
     return out
+
+
+def geo_breakdown(geo_rows, vertical):
+    """Розбивка по країні юзера для напряму. geo_rows — з fetch_insights_geo (breakdowns=country)."""
+    agg = {}
+    for r in geo_rows:
+        if C.classify(r.get("campaign_name", "")) != vertical:
+            continue
+        country = r.get("country") or "—"
+        d = agg.setdefault(country, {"spend": 0.0, "impr": 0.0, "clicks": 0.0, "results": 0.0})
+        d["spend"] += _num(r.get("spend"))
+        d["impr"] += _num(r.get("impressions"))
+        d["clicks"] += _num(r.get("inline_link_clicks")) or _num(r.get("clicks"))
+        d["results"] += _result(r.get("actions"), vertical)
+    out = [[c, *_metrics(d["spend"], d["impr"], d["clicks"], d["results"])] for c, d in agg.items()]
+    out.sort(key=lambda r: r[4], reverse=True)  # за кількістю заявок
+    return out
