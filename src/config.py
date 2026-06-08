@@ -36,15 +36,24 @@ RESULT_ACTIONS = {
         "complete_registration",
         "offsite_conversion.fb_pixel_complete_registration",
     ],
-    "TG": [
-        "offsite_conversion.fb_pixel_custom.Subscribe",
-        "subscribe",
-        "offsite_conversion.custom.Subscribe",
-        "lead",
-        "offsite_conversion.fb_pixel_lead",
-    ],
     "other": ["lead", "offsite_conversion.fb_pixel_lead"],
 }
+
+# --- TG: результат залежить від дати ---
+# до TG_SWITCH_DATE рахуємо ЛІДИ, з цієї дати — ПІДПИСКИ НА САЙТІ
+TG_SWITCH_DATE = "2026-06-02"
+TG_LEAD_ACTIONS = [
+    "lead",
+    "offsite_conversion.fb_pixel_lead",
+    "onsite_conversion.lead_grouped",
+]
+TG_SUBSCRIBE_ACTIONS = [
+    "offsite_conversion.fb_pixel_custom.Subscribe",
+    "offsite_conversion.fb_pixel_subscribe",
+    "subscribe",
+    "onsite_conversion.subscribe",
+    "offsite_conversion.custom.Subscribe",
+]
 
 # людська назва результату для відображення
 RESULT_LABEL = {"JOB": "Заявки", "TG": "Підписки/ліди", "other": "Результати"}
