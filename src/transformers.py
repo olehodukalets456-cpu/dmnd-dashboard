@@ -22,9 +22,6 @@ def _result(actions, vertical, date=""):
             for at in C.TG_SUBSCRIBE_ACTIONS:
                 if at in by:
                     return by[at]
-            for k, v in by.items():  # будь-який тип, що містить "subscribe"
-                if "subscribe" in (k or "").lower():
-                    return v
             return 0.0
         for at in C.TG_LEAD_ACTIONS:
             if at in by:
