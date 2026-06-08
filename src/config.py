@@ -48,6 +48,7 @@ TG_LEAD_ACTIONS = [
     "onsite_conversion.lead_grouped",
 ]
 TG_SUBSCRIBE_ACTIONS = [
+    "offsite_conversion.fb_pixel_custom",          # кастомна подія підписки (твій кабінет)
     "offsite_conversion.fb_pixel_custom.Subscribe",
     "offsite_conversion.fb_pixel_subscribe",
     "subscribe",
