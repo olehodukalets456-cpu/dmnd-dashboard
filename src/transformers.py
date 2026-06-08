@@ -12,10 +12,24 @@ def _num(v):
         return 0.0
 
 
-def _result(actions, vertical):
+def _result(actions, vertical, date=""):
     if not actions:
         return 0.0
     by = {a.get("action_type"): _num(a.get("value")) for a in actions}
+    if vertical == "TG":
+        # до cutoff — ліди, з cutoff — підписки на сайті
+        if date and date >= C.TG_SWITCH_DATE:
+            for at in C.TG_SUBSCRIBE_ACTIONS:
+                if at in by:
+                    return by[at]
+            for k, v in by.items():  # будь-який тип, що містить "subscribe"
+                if "subscribe" in (k or "").lower():
+                    return v
+            return 0.0
+        for at in C.TG_LEAD_ACTIONS:
+            if at in by:
+                return by[at]
+        return 0.0
     for at in C.RESULT_ACTIONS.get(vertical, []):
         if at in by:
             return by[at]
@@ -67,7 +81,7 @@ def normalize(insights):
             "spend": _num(r.get("spend")),
             "impr": _num(r.get("impressions")),
             "clicks": clicks,
-            "results": _result(r.get("actions"), vert),
+            "results": _result(r.get("actions"), vert, r.get("date_start", "")),
         })
     return out
 
