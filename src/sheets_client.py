@@ -1,4 +1,5 @@
 """Запис у Google Sheets через service account."""
+import re
 import json
 import datetime
 import gspread
@@ -22,6 +23,18 @@ def open_sheet():
 
 def _img(url):
     return f'=IMAGE("{url}";4;{IMG_H};{IMG_H})' if url else ""
+
+
+def _norm_date(v):
+    """Витягти YYYY-MM-DD з різних форматів (ISO, DD.MM.YYYY, дата-час)."""
+    s = str(v).strip()
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", s)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    m = re.search(r"(\d{2})[./](\d{2})[./](\d{4})", s)  # DD.MM.YYYY або DD/MM/YYYY
+    if m:
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    return s[:10]
 
 
 def _fmt_req(ws, r0, r1, c0, c1, bg=None, bold=False, color=None):
@@ -76,6 +89,58 @@ def write_table(sh, tab, rows, total=True):
                       round(s / re, 2) if re else 0.0,
                       round(cl / im, 4) if im else 0.0,
                       round(s / cl, 2) if cl else 0.0])
+    if block:
+        ws.update(f"A4:H{3 + len(block)}", block, value_input_option="USER_ENTERED")
+
+
+def write_tg_day_table(sh, tab, rows, manual_date):
+    """TG по днях: дні з manual_date і пізніше — колонки 'Результати' (E) та 'Ціна за рез.' (F)
+    вносяться ВРУЧНУ. Скрипт їх НЕ перезаписує: зчитує наявні значення і повертає назад,
+    нові дати приходять порожні. Витрати/кліки/CTR/CPC тягнуться як завжди."""
+    ws = sh.worksheet(tab)
+
+    # 1) зчитати наявні ручні значення по даті: {YYYY-MM-DD: (Результати, Ціна)}
+    existing = {}
+    try:
+        cur = ws.get_values("A4:F100000")
+    except Exception:
+        cur = []
+    for r in cur:
+        if not r or not r[0] or str(r[0]).strip() == "ВСЬОГО":
+            continue
+        key = _norm_date(r[0])
+        e = r[4] if len(r) > 4 else ""
+        f = r[5] if len(r) > 5 else ""
+        existing[key] = (e, f)
+
+    # 2) зібрати блок; для ручних днів підставити збережені значення
+    def _n(x):
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return 0.0
+
+    block = []
+    for row in rows:
+        row = list(row)
+        key = _norm_date(row[0])
+        if key >= manual_date:
+            e, f = existing.get(key, ("", ""))
+            row[4] = e   # Результати — ручне, зберігаємо
+            row[5] = f   # Ціна за рез. — ручне, зберігаємо
+        block.append(row)
+
+    # 3) ВСЬОГО (підписки враховують і ручні значення, що вже введені)
+    if block:
+        s = sum(_n(r[1]) for r in block); im = sum(_n(r[2]) for r in block)
+        cl = sum(_n(r[3]) for r in block); re = sum(_n(r[4]) for r in block)
+        block.append(["ВСЬОГО", round(s, 2), int(im), int(cl),
+                      int(re) if re else "",
+                      round(s / re, 2) if re else "",
+                      round(cl / im, 4) if im else 0.0,
+                      round(s / cl, 2) if cl else 0.0])
+
+    ws.batch_clear([f"A4:H{4 + 20000}"])
     if block:
         ws.update(f"A4:H{3 + len(block)}", block, value_input_option="USER_ENTERED")
 
