@@ -16,8 +16,8 @@ def main():
 
     insights = meta.fetch_insights(C.SYNC_SINCE, until)
     log.info("Денних рядків з Meta: %d", len(insights))
-    norm = T.normalize(insights)
 
+    norm = T.normalize(insights)
     ad_ids = list({it["ad_id"] for it in norm if it["ad_id"]})
     images = meta.fetch_images(ad_ids)
     log.info("Зображень креативів: %d", len(images))
@@ -35,7 +35,11 @@ def main():
                                   T.campaigns_breakdown(norm, vert),
                                   T.creatives_by_segment(norm, images, vert),
                                   vert)
-        sheets.write_table(sh, day_tab, T.by_period(norm, vert, "day"))
+        if vert == "TG":
+            # TG по днях: з TG_MANUAL_DATE підписки вводяться вручну й зберігаються між синками
+            sheets.write_tg_day_table(sh, day_tab, T.by_period(norm, vert, "day"), C.TG_MANUAL_DATE)
+        else:
+            sheets.write_table(sh, day_tab, T.by_period(norm, vert, "day"))
         sheets.write_table(sh, mon_tab, T.by_period(norm, vert, "month"))
 
     sheets.write_all_creatives(sh, T.all_creatives(norm, images))
