@@ -14,10 +14,16 @@ def _num(v):
 
 def _result(actions, vertical, date=""):
     if not actions:
+        # для TG з ручної дати повертаємо None навіть без actions — щоб день був "ручний"
+        if vertical == "TG" and date and date >= C.TG_MANUAL_DATE:
+            return None
         return 0.0
     by = {a.get("action_type"): _num(a.get("value")) for a in actions}
     if vertical == "TG":
-        # до cutoff — ліди, з cutoff — підписки на сайті
+        # з TG_MANUAL_DATE результат вводиться вручну — НЕ тягнемо з Meta
+        if date and date >= C.TG_MANUAL_DATE:
+            return None
+        # до TG_SWITCH_DATE — ліди, з cutoff — підписки на сайті
         if date and date >= C.TG_SWITCH_DATE:
             for at in C.TG_SUBSCRIBE_ACTIONS:
                 if at in by:
@@ -89,7 +95,7 @@ def _agg(items, key):
         k = key(it)
         d = g.setdefault(k, {"spend": 0.0, "impr": 0.0, "clicks": 0.0, "results": 0.0, "ref": it})
         d["spend"] += it["spend"]; d["impr"] += it["impr"]
-        d["clicks"] += it["clicks"]; d["results"] += it["results"]
+        d["clicks"] += it["clicks"]; d["results"] += (it["results"] or 0)  # None (ручні TG) -> 0 в агрегатах
     return g
 
 
@@ -108,7 +114,7 @@ def raw_rows(norm, images):
 def vertical_totals(norm, vertical):
     items = [it for it in norm if it["vertical"] == vertical]
     s = sum(i["spend"] for i in items); im = sum(i["impr"] for i in items)
-    cl = sum(i["clicks"] for i in items); re = sum(i["results"] for i in items)
+    cl = sum(i["clicks"] for i in items); re = sum((i["results"] or 0) for i in items)
     return list(_metrics(s, im, cl, re))
 
 
@@ -124,7 +130,16 @@ def by_period(norm, vertical, period):
     items = [it for it in norm if it["vertical"] == vertical]
     keyf = (lambda it: it["date"]) if period == "day" else (lambda it: it["date"][:7])
     g = _agg(items, keyf)
-    out = [[k, *_metrics(d["spend"], d["impr"], d["clicks"], d["results"])] for k, d in g.items() if k]
+    out = []
+    for k, d in g.items():
+        if not k:
+            continue
+        row = [k, *_metrics(d["spend"], d["impr"], d["clicks"], d["results"])]
+        # TG по днях: з TG_MANUAL_DATE результат і ціна — ручні (порожні, заповнюєш сам)
+        if vertical == "TG" and period == "day" and k >= C.TG_MANUAL_DATE:
+            row[4] = ""   # Результати лід/підписка
+            row[5] = ""   # Ціна за рез.
+        out.append(row)
     out.sort(key=lambda r: r[0])
     return out
 
@@ -183,7 +198,7 @@ def geo_breakdown(geo_rows, vertical):
         d["spend"] += _num(r.get("spend"))
         d["impr"] += _num(r.get("impressions"))
         d["clicks"] += _num(r.get("inline_link_clicks")) or _num(r.get("clicks"))
-        d["results"] += _result(r.get("actions"), vertical)
+        d["results"] += (_result(r.get("actions"), vertical) or 0)
     out = [[c, *_metrics(d["spend"], d["impr"], d["clicks"], d["results"])] for c, d in agg.items()]
     out.sort(key=lambda r: r[4], reverse=True)  # за кількістю заявок
     return out
