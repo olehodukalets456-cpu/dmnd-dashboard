@@ -14,6 +14,7 @@ SYNC_SINCE = "2026-05-25"          # дата старту запуску
 # --- Meta API ---
 GRAPH_VERSION = "v21.0"
 
+
 # --- класифікація кампаній за префіксом до першого пайпа ---
 # "JOB | LEADS | ..." -> JOB ; "TG | UKR - ..." -> TG ; решта -> other
 def classify(campaign_name: str) -> str:
@@ -25,6 +26,7 @@ def classify(campaign_name: str) -> str:
     if head.startswith("TG"):
         return "TG"
     return "other"
+
 
 # --- які типи дій (actions) рахуємо як "результат" для кожного напряму ---
 # Meta повертає масив actions з різними action_type. Беремо перший знайдений зі списку.
@@ -42,6 +44,11 @@ RESULT_ACTIONS = {
 # --- TG: результат залежить від дати ---
 # до TG_SWITCH_DATE рахуємо ЛІДИ, з цієї дати — ПІДПИСКИ НА САЙТІ
 TG_SWITCH_DATE = "2026-06-02"
+
+# з TG_MANUAL_DATE TG-результат (підписки) ВНОСИТЬСЯ ВРУЧНУ у вкладку TG_дні.
+# Скрипт його НЕ тягне з Meta і НЕ перезаписує (зчитує наявне й повертає назад).
+TG_MANUAL_DATE = "2026-06-15"
+
 TG_LEAD_ACTIONS = [
     "lead",
     "offsite_conversion.fb_pixel_lead",
